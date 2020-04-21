@@ -2,6 +2,7 @@
 
 namespace OldSound\RabbitMqBundle\RabbitMq;
 
+use PhpAmqpLib\Exception\AMQPTimeoutException;
 use PhpAmqpLib\Message\AMQPMessage;
 
 class RpcClient extends BaseAmqp
@@ -55,7 +56,7 @@ class RpcClient extends BaseAmqp
         }
     }
 
-    public function getReplies()
+    public function getReplies($forceTimeout = true)
     {
         if ($this->directReplyTo) {
             $consumer_tag = $this->directConsumerTag;
@@ -63,8 +64,14 @@ class RpcClient extends BaseAmqp
             $consumer_tag = $this->getChannel()->basic_consume($this->getQueueName(), '', false, true, false, false, array($this, 'processMessage'));
         }
 
-        while (count($this->replies) < $this->requests) {
-            $this->getChannel()->wait(null, false, $this->timeout);
+        try {
+            while (count($this->replies) < $this->requests) {
+                $this->getChannel()->wait(null, false, $this->timeout);
+            }
+        } catch (AMQPTimeoutException $e) {
+            if ($forceTimeout) {
+                throw $e;
+            }
         }
 
         $this->getChannel()->basic_cancel($consumer_tag);
